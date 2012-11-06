@@ -1,0 +1,240 @@
+<html>
+  <head>
+  </head>
+  <body>
+    <button id="theButton">Click me.</button>
+    <input id="rate" type="range" min=".5" max="2"value="1"step=".01"/>
+    <script type="text/javascript">	  
+	  
+      var namespace = function(namespaceString) {
+        var parts = namespaceString.split('.'),
+            parent = window,
+            currentPart = '';    
+	
+            for(var i = 0, length = parts.length; i < length; i++) {
+              currentPart = parts[i];
+              parent[currentPart] = parent[currentPart] || {};
+              parent = parent[currentPart];
+             }
+
+          return parent;
+	}
+	//instantiate a namespace
+      var grainTable = namespace('GrainTable');
+    
+      grainTable.audioGraph = (function(){
+        var _context = new webkitAudioContext(),
+            _source0 = _context.createBufferSource(),
+			_source1 = _context.createBufferSource(),
+			_source2 = _context.createBufferSource(),
+			
+			_gain0   = _context.createGainNode(),
+			_gain1   = _context.createGainNode(),
+			_gain2   = _context.createGainNode(),
+            
+			_bufferCache,
+            _rate,
+			_grainSize,
+			_grainLocation = 0,
+            
+            //for chaching / retrieving the buffer
+            _getBufferCache = function(){
+              return _bufferCache;	
+            },
+            
+            _setBufferCache = function(_sound){
+              _bufferCache = _sound;
+			  _chopItUp();	
+            },
+
+            //for setting the current instance of the buffer 
+            _setBuffer = function(_sound){
+              _source0.buffer = _sound;
+			  _source1.buffer = _sound;
+			  _source2.buffer = _sound;
+			  
+            },
+            
+            _setPlaybackRate = function(rate){
+              _source0.playbackRate.value = rate;
+			  _source1.playbackRate.value = rate;
+			  _source2.playbackRate.value = rate;
+            },
+            
+            _setRate = function(myRate){
+            	_rate = myRate;
+            	console.log(myRate);
+            }
+	
+            //play it
+            _playSound = function(){
+              
+			  GrainTable.scheduler.startTimer(_grainSize);
+			  GrainTable.scheduler.setNextLoop(_grainSize);
+            
+              _source0 = _context.createBufferSource();
+			  _source1 = _context.createBufferSource(); 
+			  _source2 = _context.createBufferSource(); 
+			  
+              _setBuffer(_bufferCache);
+              
+              _setPlaybackRate(_rate);
+				              
+              _source0.connect(_gain0); 
+			  _source1.connect(_gain1);
+			  _source1.connect(_gain1);
+			  
+              _source0.noteGrainOn(0,_grainLocation,_grainSize);
+			  _gain0.gain.linearRampToValueAtTime(1.0, (_context.currentTime + (_grainSize * 0.33)));
+			  _gain0.gain.linearRampToValueAtTime(0.0, (_context.currentTime + (_grainSize - (_grainSize * 0.33))));
+			  
+			  _source1.noteGrainOn((_context.currentTime+(_grainSize * 0.33)),( _grainLocation + _grainSize / 2), _grainSize)
+			  _gain1.gain.linearRampToValueAtTime(1.0, ((_context.currentTime + (_grainSize * 0.33)) + (_grainSize * 0.33)));
+			  _gain1.gain.linearRampToValueAtTime(0.0, ((_context.currentTime + (_grainSize * 0.33)) + (_grainSize - (_grainSize * 0.33))));
+			  
+			  _source2.noteGrainOn((_context.currentTime+(_grainSize * 0.67)),( _grainLocation + _grainSize / 2), _grainSize)
+			  _gain2.gain.linearRampToValueAtTime(1.0, ((_context.currentTime + (_grainSize * 0.67)) + (_grainSize * 0.33)));
+			  _gain2.gain.linearRampToValueAtTime(0.0, ((_context.currentTime + (_grainSize * 0.67)) + (_grainSize - (_grainSize * 0.33))));
+			  
+			  _grainLocation += _grainSize;
+            },
+			
+            _getCurrentTime = function(){
+			  return _context.currentTime;
+            },
+
+			
+			_chopItUp = function(){
+			  _grainSize = .2;
+			};
+			
+			_gain0.connect(_context.destination);
+			_gain1.connect(_context.destination)
+			
+
+        return{
+          context        :_context,
+          setBuffer      :_setBuffer,
+          setBufferCache :_setBufferCache,
+          playSound      :_playSound,
+          setRate        :_setRate,
+		  getCurrentTime :_getCurrentTime
+        }//interface
+      }());//audioGraph
+    
+      
+      grainTable.loader = (function(){
+        var _request       = new XMLHttpRequest(),
+            _handleRequest = function(url){
+              _request.open('GET',url,true);
+              _request.responseType = 'arraybuffer';
+              _request.onload = function(){
+                GrainTable.audioGraph.context.decodeAudioData(_request.response, function(buffer){
+                  _loadedBuffer = buffer;
+                  GrainTable.audioGraph.setBuffer(buffer);
+                  GrainTable.audioGraph.setBufferCache(buffer);
+                  console.log("loaded");
+                },function(){/*console.log("")*/});
+              };
+              _request.send();
+            };
+        _handleRequest("audio/mayor.mp3");
+      	return{
+      	
+      	}//interface
+      }());//loader
+      
+      grainTable.DOMelements =(function(){
+        var _range = document.getElementById("rate"),
+            _setRate = function(){
+              GrainTable.audioGraph.setRate(_range.value)
+            },
+			_playSound = function(){
+			  GrainTable.audioGraph.playSound();
+			}
+        
+        console.log(_range);
+        
+        _range.addEventListener("change", _setRate);
+      
+        return{
+        
+        }//end interface
+      }());// end DOMelements
+      
+      var _theButton = document.getElementById("theButton")
+      _theButton.addEventListener("click", _playSound);
+	  
+	//the clock
+	grainTable.scheduler = (function(){
+		
+		
+		//////////////////////
+		//private properties//
+		//////////////////////
+		
+		var _nextLoop,
+			_timerRunning = false,
+			
+
+			///////////////////
+			//private methods//
+			///////////////////
+			
+			_checkSchedule = function(){
+				//console.log("current time: " + Shuffler.audioGraph.getCurrentTime());
+				//console.log("nextTime: " + _nextLoop);
+				if( _nextLoop <= ( GrainTable.audioGraph.getCurrentTime() +.01 ) && _timerRunning === true){
+					//console.log("true")
+					_clearTimer();
+					_timerRunning = false;
+					GrainTable.audioGraph.playSound();
+				}
+				else{
+					//console.log("false");
+					_timer("GrainTable.scheduler.checkSchedule()");
+				}
+			},
+			
+			_clearTimer = function(){
+				_timerRunning = false;
+				clearTimeout(_timer);	
+			},
+			
+			_getTimerRunning = function(){
+				return _timerRunning;	
+			},
+			
+			_setNextLoop = function(_setValue){
+				
+				_nextLoop = GrainTable.audioGraph.getCurrentTime() + _setValue;
+			},
+			
+			_startTimer = function(myDuration){
+				_timerRunning = true;
+				_timer("GrainTable.scheduler.checkSchedule()", myDuration);
+					
+			},
+			
+			_timer = function(func, length){
+				_innerTimer = setTimeout(func, length)
+			}
+			
+			
+		/////////////////////
+		//public interface //
+		/////////////////////
+			
+		return{
+			setNextLoop:_setNextLoop,
+			startTimer:_startTimer,
+			checkSchedule:_checkSchedule,
+			getTimerRunning:_getTimerRunning,
+			clearTimer:_clearTimer
+		}	
+	})();
+	  
+      
+    </script>
+  </body>
+</html>
